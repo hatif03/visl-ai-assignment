@@ -29,7 +29,6 @@ async def download_resume_pdf(url: str) -> bytes | None:
         if response.status_code == 200 and len(response.content) > 100:
             return response.content
 
-        # Handle the confirmation page for large files
         confirm_url = f"https://drive.google.com/uc?export=download&confirm=t&id={file_id}"
         response = await client.get(confirm_url)
         if response.status_code == 200:
@@ -48,26 +47,46 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     return "\n".join(text_parts)
 
 
+def _update_status(db, candidate_id: str, stage: str, message: str, extra: dict | None = None):
+    payload = {"pipeline_stage": stage, "status_message": message}
+    if extra:
+        payload.update(extra)
+    db.table("candidates").update(payload).eq("id", candidate_id).execute()
+
+
+async def process_single_resume(candidate: dict) -> dict:
+    """Process a single candidate's resume. Returns updated fields dict or raises."""
+    resume_url = candidate.get("resume_url")
+    if not resume_url:
+        return {"status_message": "No resume URL provided", "pipeline_stage": "uploaded"}
+
+    pdf_bytes = await download_resume_pdf(resume_url)
+    if not pdf_bytes:
+        raise RuntimeError("Failed to download resume PDF from Google Drive")
+
+    resume_text = extract_text_from_pdf(pdf_bytes)
+    if not resume_text.strip():
+        raise RuntimeError("PDF downloaded but no text could be extracted")
+
+    return {
+        "resume_text": resume_text,
+        "pipeline_stage": "resume_processed",
+        "status_message": f"Resume parsed — {len(resume_text)} chars extracted",
+    }
+
+
 async def process_resumes_for_job(job_id: str):
     db = get_supabase()
     result = db.table("candidates").select("*").eq("job_id", job_id).execute()
 
     for candidate in result.data:
-        resume_url = candidate.get("resume_url")
-        if not resume_url:
-            continue
-
+        cid = candidate["id"]
+        name = candidate.get("name", "unknown")
         try:
-            pdf_bytes = await download_resume_pdf(resume_url)
-            if not pdf_bytes:
-                continue
-
-            resume_text = extract_text_from_pdf(pdf_bytes)
-            if resume_text.strip():
-                db.table("candidates").update({
-                    "resume_text": resume_text,
-                    "pipeline_stage": "resume_processed",
-                }).eq("id", candidate["id"]).execute()
+            _update_status(db, cid, candidate.get("pipeline_stage", "uploaded"), f"Processing resume...")
+            updates = await process_single_resume(candidate)
+            db.table("candidates").update(updates).eq("id", cid).execute()
         except Exception as e:
-            print(f"Error processing resume for {candidate.get('name', 'unknown')}: {e}")
+            _update_status(db, cid, "error", f"Resume processing failed: {e}")
+            print(f"Error processing resume for {name}: {e}")
             continue

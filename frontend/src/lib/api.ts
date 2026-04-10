@@ -1,18 +1,29 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `HTTP ${res.status}`);
+async function request<T>(path: string, options?: RequestInit, retries = 1): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(error.detail || `HTTP ${res.status}`);
+      }
+      return res.json();
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
   }
-  return res.json();
+  throw new Error("Request failed");
 }
 
 export const api = {
@@ -41,6 +52,9 @@ export const api = {
     return request<{ candidates: Candidate[]; total: number }>(`/candidates?${query}`);
   },
   getCandidate: (id: string) => request<Candidate>(`/candidates/${id}`),
+  deleteCandidate: (id: string) => request(`/candidates/${id}`, { method: "DELETE" }),
+  retryResume: (id: string) => request(`/candidates/${id}/retry-resume`, { method: "POST" }),
+  retryEvaluation: (id: string) => request(`/candidates/${id}/retry-evaluation`, { method: "POST" }),
   getPipelineSummary: (jobId: string) => request<PipelineSummary>(`/candidates/pipeline/summary?job_id=${jobId}`),
   processResumes: (jobId: string) =>
     request(`/candidates/process-resumes?job_id=${jobId}`, { method: "POST" }),
@@ -114,6 +128,7 @@ export interface Candidate {
   resume_url?: string;
   resume_text?: string;
   pipeline_stage: string;
+  status_message?: string | null;
   created_at: string;
   scores?: Score | null;
 }

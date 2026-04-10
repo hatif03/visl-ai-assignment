@@ -22,7 +22,11 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
-import { GitFork, Mail, GraduationCap, FileText, ExternalLink } from "lucide-react";
+import { GitFork, Mail, GraduationCap, FileText, ExternalLink, RotateCcw, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/back-button";
+import { PageSkeleton } from "@/components/loading";
+import { toast } from "sonner";
 
 const DIMENSION_LABELS: Record<string, string> = {
   jd_match: "JD Match",
@@ -58,7 +62,7 @@ export default function CandidateDetailPage() {
       .finally(() => setLoading(false));
   }, [candidateId]);
 
-  if (loading) return <p className="text-muted-foreground">Loading...</p>;
+  if (loading) return <PageSkeleton rows={4} />;
   if (!candidate) return <p className="text-destructive">Candidate not found.</p>;
 
   const breakdown = score?.score_breakdown;
@@ -89,6 +93,7 @@ export default function CandidateDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
+          <BackButton label="Back" />
           <h1 className="text-3xl font-bold tracking-tight">{candidate.name}</h1>
           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" />{candidate.email}</span>
@@ -189,24 +194,63 @@ export default function CandidateDetailPage() {
       </div>
 
       {/* AI Evaluation Details */}
-      {llmResult && (
+      {llmResult && (() => {
+        const evalFailed = ["technical_depth", "project_complexity", "research_quality", "jd_alignment"].every(
+          (dim) => {
+            const d = llmResult[dim] as { score?: number; justification?: string } | undefined;
+            return d && d.score === 0 && d.justification?.toLowerCase().includes("failed");
+          }
+        );
+        return (
         <Card>
-          <CardHeader><CardTitle>AI Evaluation (Explainable)</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>AI Evaluation (Explainable)</CardTitle>
+              {evalFailed && candidate && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={async () => {
+                    try {
+                      toast.info("Re-running evaluation...");
+                      await api.retryEvaluation(candidate.id);
+                      toast.success("Evaluation re-queued — refresh in a moment");
+                    } catch {
+                      toast.error("Failed to re-trigger evaluation");
+                    }
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Retry Evaluation
+                </Button>
+              )}
+            </div>
+          </CardHeader>
           <CardContent className="space-y-4">
+            {evalFailed && (
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 mb-2">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Evaluation failed for this candidate</p>
+                  <p className="text-sm opacity-80">This was likely caused by an API rate limit or connection timeout. Use the retry button above to re-run.</p>
+                </div>
+              </div>
+            )}
             {["technical_depth", "project_complexity", "research_quality", "jd_alignment"].map((dim) => {
               const d = llmResult[dim] as { score?: number; justification?: string } | undefined;
               if (!d) return null;
+              const isFailed = d.score === 0 && d.justification?.toLowerCase().includes("failed");
               return (
-                <div key={dim} className="p-4 rounded-lg bg-muted/50">
+                <div key={dim} className={`p-4 rounded-lg ${isFailed ? "bg-red-50/50 border border-red-100" : "bg-muted/50"}`}>
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="font-semibold capitalize">{dim.replace("_", " ")}</h4>
-                    <Badge variant="secondary">{d.score}/10</Badge>
+                    <Badge variant={isFailed ? "destructive" : "secondary"}>{isFailed ? "Failed" : `${d.score}/10`}</Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{d.justification}</p>
+                  <p className={`text-sm ${isFailed ? "text-red-600" : "text-muted-foreground"}`}>{d.justification}</p>
                 </div>
               );
             })}
-            {llmResult.overall_assessment && (
+            {llmResult.overall_assessment && !evalFailed && (
               <>
                 <Separator />
                 <div>
@@ -215,6 +259,7 @@ export default function CandidateDetailPage() {
                 </div>
               </>
             )}
+            {!evalFailed && (
             <div className="grid gap-4 md:grid-cols-2">
               {Array.isArray(llmResult.strengths) && llmResult.strengths.length > 0 && (
                 <div>
@@ -241,9 +286,11 @@ export default function CandidateDetailPage() {
                 </div>
               )}
             </div>
+            )}
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* GitHub Analysis */}
       {githubAnalysis && (githubAnalysis as Record<string, unknown>).repos && (

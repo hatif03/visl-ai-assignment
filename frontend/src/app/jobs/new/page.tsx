@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { BackButton } from "@/components/back-button";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 
@@ -61,6 +62,7 @@ export default function NewJobPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
+        <BackButton href="/jobs" label="Back to Jobs" />
         <h1 className="text-3xl font-bold tracking-tight">Create Job</h1>
         <p className="text-muted-foreground mt-1">
           Define a role and configure how candidates are evaluated

@@ -1,3 +1,4 @@
+import asyncio
 from app.database import get_supabase
 from app.core.llm import llm_json_completion
 from app.core.embeddings import get_embedding, cosine_similarity
@@ -45,6 +46,10 @@ Return ONLY valid JSON in this exact format:
   "strengths": ["<strength 1>", "<strength 2>"],
   "concerns": ["<concern 1>", "<concern 2>"]
 }}"""
+
+
+def _update_status(db, candidate_id: str, stage: str, message: str):
+    db.table("candidates").update({"pipeline_stage": stage, "status_message": message}).eq("id", candidate_id).execute()
 
 
 async def evaluate_single_candidate(candidate: dict, job_description: str) -> dict:
@@ -124,14 +129,23 @@ async def run_evaluation_pipeline(job_id: str, candidate_ids: list[str] | None =
     candidates_result = query.execute()
     candidates = candidates_result.data
 
-    for candidate in candidates:
+    total = len(candidates)
+    for idx, candidate in enumerate(candidates, 1):
+        cid = candidate["id"]
+        name = candidate.get("name", "unknown")
         try:
+            _update_status(db, cid, "evaluating", f"[{idx}/{total}] Running LLM evaluation...")
+
             llm_eval = await evaluate_single_candidate(candidate, job_description)
+
+            _update_status(db, cid, "evaluating", f"[{idx}/{total}] Computing semantic similarity...")
+
             semantic_scores = await compute_semantic_scores(candidate, jd_embedding)
 
             github_analysis = None
             github_url = candidate.get("github_url")
             if github_url:
+                _update_status(db, cid, "evaluating", f"[{idx}/{total}] Analyzing GitHub profile...")
                 github_analysis = await analyze_github_profile(github_url)
 
             llm_jd_score = llm_eval.get("jd_alignment", {}).get("score", 0) / 10.0
@@ -152,7 +166,7 @@ async def run_evaluation_pipeline(job_id: str, candidate_ids: list[str] | None =
             }
 
             eval_data = {
-                "candidate_id": candidate["id"],
+                "candidate_id": cid,
                 "job_id": job_id,
                 "resume_score": round(semantic_scores.get("resume_similarity", 0), 4),
                 "project_score": round(project_score, 4),
@@ -162,14 +176,18 @@ async def run_evaluation_pipeline(job_id: str, candidate_ids: list[str] | None =
                 "explanation": explanation,
             }
 
-            existing = db.table("evaluations").select("id").eq("candidate_id", candidate["id"]).eq("job_id", job_id).execute()
+            existing = db.table("evaluations").select("id").eq("candidate_id", cid).eq("job_id", job_id).execute()
             if existing.data:
                 db.table("evaluations").update(eval_data).eq("id", existing.data[0]["id"]).execute()
             else:
                 db.table("evaluations").insert(eval_data).execute()
 
-            db.table("candidates").update({"pipeline_stage": "evaluated"}).eq("id", candidate["id"]).execute()
+            _update_status(db, cid, "evaluated", f"Evaluation complete — JD match: {combined_jd:.0%}")
+
+            if idx < total:
+                await asyncio.sleep(1.5)
 
         except Exception as e:
-            print(f"Evaluation pipeline error for {candidate.get('name', 'unknown')}: {e}")
+            _update_status(db, cid, "error", f"Evaluation failed: {e}")
+            print(f"Evaluation pipeline error for {name}: {e}")
             continue

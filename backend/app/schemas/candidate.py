@@ -20,6 +20,7 @@ class CandidateResponse(CandidateBase):
     job_id: str
     resume_text: Optional[str] = None
     pipeline_stage: str
+    status_message: Optional[str] = None
     created_at: str
     scores: Optional[dict] = None
 

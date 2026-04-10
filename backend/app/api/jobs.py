@@ -25,10 +25,15 @@ async def create_job(job: JobCreate):
 async def list_jobs():
     db = get_supabase()
     result = db.table("jobs").select("*").order("created_at", desc=True).execute()
+    job_ids = [row["id"] for row in result.data]
+    count_map: dict[str, int] = {}
+    if job_ids:
+        all_candidates = db.table("candidates").select("job_id").in_("job_id", job_ids).execute()
+        for c in all_candidates.data:
+            count_map[c["job_id"]] = count_map.get(c["job_id"], 0) + 1
     jobs = []
     for row in result.data:
-        count_result = db.table("candidates").select("id", count="exact").eq("job_id", row["id"]).execute()
-        row["candidate_count"] = count_result.count or 0
+        row["candidate_count"] = count_map.get(row["id"], 0)
         jobs.append(JobResponse(**row))
     return jobs
 

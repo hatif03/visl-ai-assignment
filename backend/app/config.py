@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     gemini_api_key: Optional[str] = None
 
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "gemini-embedding-001"
 
     github_token: Optional[str] = None
 
