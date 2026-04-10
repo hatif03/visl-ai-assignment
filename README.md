@@ -24,7 +24,7 @@ An AI-powered recruitment pipeline that automates candidate evaluation, scoring,
 - **Database**: Supabase (PostgreSQL with RLS)
 - **LLM**: LiteLLM (Gemini 2.0 Flash → Gemini 1.5 Flash → Groq Llama 3.3)
 - **Embeddings**: Google GenAI SDK (`gemini-embedding-001`, 768-dim)
-- **Deployment**: Railway (backend) + Vercel (frontend) + Docker
+- **Deployment**: Render (backend) + Vercel (frontend) + Docker
 
 ## Quick Start
 
@@ -111,19 +111,23 @@ This starts both backend (port 8000) and frontend (port 3000).
 
 ## Deployment
 
-### Backend on Railway
+### Backend on Render (Free)
 
-1. Create a new Railway project
+1. Create a [Render](https://render.com) account and click **New → Web Service**
 2. Connect your GitHub repository
-3. Set the root directory to `backend/`
-4. Add all environment variables from `backend/.env.example`
-5. Railway auto-detects the Dockerfile and deploys
+3. Set **Root Directory** to `backend/`
+4. Set **Runtime** to **Docker**
+5. Add all environment variables from `backend/.env.example` in the Render dashboard
+6. Click **Deploy** — Render builds from the Dockerfile automatically
+7. Your backend will be at `https://your-service.onrender.com`
 
-### Frontend on Vercel
+> Note: Render free tier spins down after 15 min of inactivity. First request after idle takes ~30s. For a demo/assignment this is fine.
 
-1. Import the repository on Vercel
-2. Set the root directory to `frontend/`
-3. Add environment variable: `NEXT_PUBLIC_API_URL=https://your-backend.railway.app/api`
+### Frontend on Vercel (Free)
+
+1. Import the repository on [Vercel](https://vercel.com)
+2. Set **Root Directory** to `frontend/`
+3. Add environment variable: `NEXT_PUBLIC_API_URL=https://your-service.onrender.com/api`
 4. Deploy — Vercel auto-detects Next.js
 
 ### Supabase Setup

@@ -10,7 +10,7 @@ The AI Candidate Screening Platform automates the end-to-end recruitment workflo
 ┌──────────────────────────┐      ┌──────────────────────────────────┐      ┌──────────────────┐
 │   Next.js 16 Frontend    │─────▶│       FastAPI Backend            │─────▶│    Supabase       │
 │   React 19 + shadcn/ui   │      │       Python 3.11+               │      │    PostgreSQL     │
-│   Vercel Hosting         │◀─────│       Railway Hosting             │◀─────│    (Managed)      │
+│   Vercel Hosting         │◀─────│       Render Hosting              │◀─────│    (Managed)      │
 └──────────────────────────┘      └──────────┬───────────┬───────────┘      └──────────────────┘
                                              │           │
                           ┌──────────────────┼───────────┼──────────────────┐
@@ -352,18 +352,19 @@ API client retries failed requests once with 500ms backoff before showing error 
 
 ## 10. Deployment Architecture
 
-### Backend: Railway
+### Backend: Render (Free Tier)
 
 - **Runtime**: Docker container from `python:3.11-slim`
 - **Scaling**: Single instance sufficient for demo; stateless design supports horizontal scaling
-- **Environment**: All secrets injected via Railway environment variables
+- **Environment**: All secrets injected via Render dashboard environment variables
 - **Health check**: `GET /api/health` returns `{"status": "healthy", "version": "1.0.1"}`
+- **Cold start**: Free tier spins down after 15 min idle; first request takes ~30s to wake. Acceptable for demo/assignment use.
 
 ### Frontend: Vercel
 
 - **Framework**: Next.js 16 with automatic edge optimization
 - **Build**: `next build` produces optimized static + dynamic pages
-- **Environment**: `NEXT_PUBLIC_API_URL` points to Railway backend URL
+- **Environment**: `NEXT_PUBLIC_API_URL` points to Render backend URL
 - **Output**: Standalone mode for minimal container size if Docker deployed
 
 ### Database: Supabase Cloud
